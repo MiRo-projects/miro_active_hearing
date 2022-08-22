@@ -32,6 +32,7 @@
 
 import numpy as np
 import miro2 as miro
+from numpy.fft import rfft, irfft, fft, ifft
 
 # create kinematic chain object with default (calibration) configuration
 # of joints (and zeroed pose of FOOT in WORLD)
@@ -112,6 +113,32 @@ class DetectAudioEngine():
 		# ok
 		return y
 
+	# generalized cross correlation
+	def gcc(self, d0, d1):
+        # substract the means
+        # (in order to get a normalized cross-correlation at the end)
+		d0 -= d0.mean()
+		d1 -= d1.mean()
+
+		# Hann window to mitigate non-periodicity effects
+		window = np.hanning(len(d0))
+
+        # compute the cross-correlation
+		D0 = rfft(d0 * window)
+		D1 = rfft(d1 * window)
+		D0r = D0.conjugate()
+		G = D0r * D1 # frequency domain based cross correlation
+		# W0 = 1. # frequency unweighted
+		# W1 = 1./numpy.abs(G) 
+		# Xgcorr = irfft(W1 * G) # generalized frequency domain based cross correlation with "PHAT"
+		absG = np.abs(G)
+		m = max(absG)
+		W = 1. / (1e-10 * m + absG)
+		Xcorr = irfft(W * G)
+
+		return Xcorr
+
+
 	def high_point(self, hn):
 
 		# FOR INFO, see dev/jeffress
@@ -148,7 +175,8 @@ class DetectAudioEngine():
 		wav = self.buf[:, hn-L:hn+L+1]
 
 		# xcorr
-		xco = np.correlate(wav[0, :], wav[1, :], mode='same')
+		# xco = np.correlate(wav[0, :], wav[1, :], mode='same')
+		xco = self.gcc(wav[0, :], wav[1, :])
 
 		# find best peak in xco (only in plausible range)
 		i_peak = np.argmax(xco[c-L_max:c+L_max+1])
