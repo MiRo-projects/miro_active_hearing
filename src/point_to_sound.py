@@ -17,31 +17,7 @@ import matplotlib.animation as animation
 
 class AudioClient():
    
-    def __init__(self):
-
-        # which miro
-        topic_base_name = "/" + os.getenv("MIRO_ROBOT_NAME")
-       
-        # subscribers
-        self.sub_mics = rospy.Subscriber(topic_base_name + "/sensors/mics",
-            Int16MultiArray, self.callback_mics, queue_size=1, tcp_nodelay=True)
-
-        # publishers
-        self.pub_push = rospy.Publisher(topic_base_name + "/core/mpg/push", miro.msg.push, queue_size=0)
-
-        # prepare push message
-        self.msg_push = miro.msg.push()
-        self.msg_push.link = miro.constants.LINK_HEAD
-        #self.msg_push.flags = miro.constants.PUSH_FLAG_VELOCITY
-        #self.msg_push.flags = miro.constants.PUSH_FLAG_NO_TRANSLATION
-        self.msg_push.flags = miro.constants.PUSH_FLAG_NO_TRANSLATION + miro.constants.PUSH_FLAG_VELOCITY
-
-        # status flags
-        self.audio_event = None
-        self.orienting = False
-        self.action_time = 0.1 #secs
-
-        '''
+    def __init__(self):       
         #Microphone Parameters
         # Number of points to display
         self.x_len = 40000
@@ -103,20 +79,45 @@ class AudioClient():
 
         self.ani = animation.FuncAnimation(self.fig, self.update_line, fargs=(self.left_ear_ys,self.right_ear_ys, self.head_ys, self.tail_ys,), init_func=self.animation_init, interval=10, blit=False)
         self.fig.subplots_adjust(hspace=0, wspace=0)
-        self.input_mics = np.zeros((self.x_len, self.no_of_mics))
 
-        '''
+        self.input_mics = np.zeros((self.x_len, self.no_of_mics))
+        #print(self.input_mics) 
+
+        # which miro
+        topic_base_name = "/" + os.getenv("MIRO_ROBOT_NAME")
+       
+        # subscribers
+        self.sub_mics = rospy.Subscriber(topic_base_name + "/sensors/mics",
+            Int16MultiArray, self.callback_mics, queue_size=1, tcp_nodelay=True)
+
+        # publishers
+        self.pub_push = rospy.Publisher(topic_base_name + "/core/mpg/push", miro.msg.push, queue_size=0)
+
+        # prepare push message
+        self.msg_push = miro.msg.push()
+        self.msg_push.link = miro.constants.LINK_HEAD
+        #self.msg_push.flags = miro.constants.PUSH_FLAG_VELOCITY
+        #self.msg_push.flags = miro.constants.PUSH_FLAG_NO_TRANSLATION
+        self.msg_push.flags = miro.constants.PUSH_FLAG_NO_TRANSLATION + miro.constants.PUSH_FLAG_VELOCITY
+
+        # status flags
+        self.audio_event = None
+        self.orienting = False
+        self.action_time = 1 #secs
+        self.thresh = 0.05
+        
 
     def callback_mics(self, data):
         self.audio_event = AudioEng.process_data(data.data)
         
-        ## data for display
+        # data for display
 
-        # data = np.asarray(data.data)
-        # data = np.transpose(data.reshape((self.no_of_mics, 500)))
-        # data = np.flipud(data)
-        # self.input_mics = np.vstack((data, self.input_mics[:self.x_len-500,:]))
-        print(self.audio_event) 
+        data = np.asarray(data.data)
+        data = np.transpose(data.reshape((self.no_of_mics, 500)))
+        #data = np.transpose(data.reshape((self.no_of_mics, 20000)))
+        data = np.flipud(data)
+        self.input_mics = np.vstack((data, self.input_mics[:self.x_len-500,:]))
+        #print(self.audio_event) 
 
     # def loop(self):
 
@@ -150,13 +151,15 @@ class AudioClient():
 
 
     def loop_idea2(self):
-
         while not rospy.core.is_shutdown():
             # print(self.orienting)
             if self.orienting:
                 self.pub_push.publish(self.msg_push)
                 if rospy.Time.now() > self.start_time + rospy.Duration(0.5):
                     self.orienting = False
+                # print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
+                # print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x, ae_head.y, ae_head.z))
+
             else:
                 if self.audio_event is None:
                     continue
@@ -170,7 +173,7 @@ class AudioClient():
 
                 # if the event level is above the threshold than "push" towards it
 
-                if ae.level >= 0.02:
+                if ae.level >= self.thresh:
                     # send push
                     self.msg_push.pushpos = geometry_msgs.msg.Vector3(
                         miro.constants.LOC_NOSE_TIP_X, 

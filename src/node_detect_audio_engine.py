@@ -40,7 +40,7 @@ KC = miro.lib.kc_interf.kc_miro()
 
 SAMP_PER_BLOCK=500
 SAMP_BUFFERED=SAMP_PER_BLOCK*2
-RAW_MAGNITUDE_THRESH = 0.01 # normalized; audio event processing skipped unless over thresh
+#RAW_MAGNITUDE_THRESH = 0.01 # normalized; audio event processing skipped unless over thresh
 
 SPEED_OF_SOUND = 343.0 # m/s
 INTER_EAR_DISTANCE = 0.104 # metres
@@ -75,7 +75,9 @@ class DetectAudioEngine():
 		# state
 		self.n = SAMP_PER_BLOCK
 		self.buf = None
+		self.buf_head = None
 		self.buf_abs = None
+		self.buf_head_abs = None
 		self.buf_abs_fast = np.zeros((2, SAMP_PER_BLOCK), 'float32')
 		self.buf_abs_slow = np.zeros((2, SAMP_PER_BLOCK), 'float32')
 		self.buf_diff = np.zeros((SAMP_PER_BLOCK), 'float32')
@@ -91,6 +93,16 @@ class DetectAudioEngine():
 		self.elev = 0.0
 		self.level = 0.0
 
+    # dynamic threshold for SILENCE and NON-SILENCE
+	def non_silence_thresh(self,x,hn):
+		# collect data before a high point
+		noise = x[hn-200:hn]
+		# get the mean of noise
+		t = np.mean(noise)
+		# apply a new threshold for non-silence state
+
+		return t
+	
 	def filter(self, x, n):
 
 		# create filter
@@ -306,15 +318,19 @@ class DetectAudioEngine():
 	def process_data(self, data):
 
 		# default
-		event = None
-		sound_level = []
+		# event = None
+		# sound_level = []
 
 		# clear any pending event (so we can send only one per block)
 		self.level = 0.0
 
 		# reshape
 		data = np.asarray(data, 'float32') * (1.0 / 32768.0)
+		#head_data = data[2:3][:]
+		#data_all =  data.reshape((4, 20000))
 		data = data.reshape((4, SAMP_PER_BLOCK))
+		#head_data = data_all[2:3][:]
+		head_data = data[2:3][:]
 
 		# compute level
 		sound_level = []
@@ -322,18 +338,25 @@ class DetectAudioEngine():
 			x = np.mean(np.abs(data[i]))
 			sound_level.append(x)
 
-		# beyond sound level, only interested in left & right
-		data = data[0:2][:]
 
-		# first fill buffer
+		# beyond sound level, only interested in left & right
+		ear_data = data[0:2][:]
+	
+
+		# fill buffer 0,1
 		if self.buf is None:
-			self.buf = data
-			self.buf_abs = np.abs(data)
-			return (event, sound_level)
+			self.buf = ear_data
+			self.buf_abs = np.abs(ear_data)
+			# return (event, sound_level)
+         
+		# fill buffer 2
+		#if self.buf_head is None:
+		#	self.buf_head = head_data
+		self.buf_head_abs = np.abs(head_data)
 
 		# roll buffers
-		self.buf = np.hstack((self.buf[:, -SAMP_PER_BLOCK:], data))
-		self.buf_abs = np.hstack((self.buf_abs[:, -SAMP_PER_BLOCK:], np.abs(data)))
+		self.buf = np.hstack((self.buf[:, -SAMP_PER_BLOCK:], ear_data))
+		self.buf_abs = np.hstack((self.buf_abs[:, -SAMP_PER_BLOCK:], np.abs(ear_data)))
 
 		# since it is a rolling buffer, we can filter it in a rolling
 		# manner. however, I don't know if the convolve() function
@@ -362,6 +385,8 @@ class DetectAudioEngine():
 		# continue reading through looking for events
 		N = SAMP_PER_BLOCK * 2
 		d = self.buf_diff
+		d_abs = np.where(d>0,d,0)
+		d_mean = np.mean(d_abs)
 		n = self.n - SAMP_PER_BLOCK
 		hn = self.hn
 		if hn > -1:
@@ -370,7 +395,10 @@ class DetectAudioEngine():
 			else:
 				# high point now forgotten
 				hn = 0
-		thresh = RAW_MAGNITUDE_THRESH
+		#thresh = RAW_MAGNITUDE_THRESH
+		thresh = self.non_silence_thresh(self.buf_head_abs,hn)+d_mean
+		print(thresh)
+
 		if hn >= 0:
 			h = d[hn]
 		else:
