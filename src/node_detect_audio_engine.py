@@ -40,7 +40,7 @@ KC = miro.lib.kc_interf.kc_miro()
 
 SAMP_PER_BLOCK=500
 SAMP_BUFFERED=SAMP_PER_BLOCK*2
-#RAW_MAGNITUDE_THRESH = 0.01 # normalized; audio event processing skipped unless over thresh
+RAW_MAGNITUDE_THRESH = 0.01 # normalized; audio event processing skipped unless over thresh
 
 SPEED_OF_SOUND = 343.0 # m/s
 INTER_EAR_DISTANCE = 0.104 # metres
@@ -96,9 +96,11 @@ class DetectAudioEngine():
     # dynamic threshold for SILENCE and NON-SILENCE
 	def non_silence_thresh(self,x,hn):
 		# collect data before a high point
-		noise = x[hn-200:hn]
+		noise = x[hn-50:hn]
+		n_abs = np.abs(noise)
 		# get the mean of noise
-		t = np.mean(noise)
+		# print(n_abs) # 有时候会有第二个维度，有第二个维度的时候输出不是\non
+		t = np.mean(n_abs)
 		# apply a new threshold for non-silence state
 
 		return t
@@ -328,9 +330,11 @@ class DetectAudioEngine():
 		data = np.asarray(data, 'float32') * (1.0 / 32768.0)
 		#head_data = data[2:3][:]
 		#data_all =  data.reshape((4, 20000))
+		#print(data.shape)
 		data = data.reshape((4, SAMP_PER_BLOCK))
 		#head_data = data_all[2:3][:]
-		head_data = data[2:3][:]
+		head_data = data[2][:]
+		#print(head_data)
 
 		# compute level
 		sound_level = []
@@ -341,6 +345,7 @@ class DetectAudioEngine():
 
 		# beyond sound level, only interested in left & right
 		ear_data = data[0:2][:]
+		#print(ear_data.shape)
 	
 
 		# fill buffer 0,1
@@ -348,15 +353,15 @@ class DetectAudioEngine():
 			self.buf = ear_data
 			self.buf_abs = np.abs(ear_data)
 			# return (event, sound_level)
-         
-		# fill buffer 2
-		#if self.buf_head is None:
-		#	self.buf_head = head_data
-		self.buf_head_abs = np.abs(head_data)
+		if self.buf_head is None:
+			self.buf_head = head_data
+			self.buf_head_abs = np.abs(head_data)
+		#print(self.buf_head_abs)
 
-		# roll buffers
+		# roll buffers, same data is added
 		self.buf = np.hstack((self.buf[:, -SAMP_PER_BLOCK:], ear_data))
 		self.buf_abs = np.hstack((self.buf_abs[:, -SAMP_PER_BLOCK:], np.abs(ear_data)))
+		# print(self.buf.shape) # output is (2,1000)
 
 		# since it is a rolling buffer, we can filter it in a rolling
 		# manner. however, I don't know if the convolve() function
@@ -396,7 +401,11 @@ class DetectAudioEngine():
 				# high point now forgotten
 				hn = 0
 		#thresh = RAW_MAGNITUDE_THRESH
-		thresh = self.non_silence_thresh(self.buf_head_abs,hn)+d_mean
+		#print(hn)
+		if hn!=0:
+			thresh = self.non_silence_thresh(self.buf_head_abs,hn)+d_mean
+		else:
+			thresh = RAW_MAGNITUDE_THRESH
 		print(thresh)
 
 		if hn >= 0:

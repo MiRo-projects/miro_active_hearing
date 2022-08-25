@@ -113,11 +113,12 @@ class AudioClient():
         # data for display
 
         data = np.asarray(data.data)
+        # print(data.shape) # output:(2000,)
+        # 500 samples from each mics
         data = np.transpose(data.reshape((self.no_of_mics, 500)))
-        #data = np.transpose(data.reshape((self.no_of_mics, 20000)))
         data = np.flipud(data)
         self.input_mics = np.vstack((data, self.input_mics[:self.x_len-500,:]))
-        #print(self.audio_event) 
+        print(self.audio_event) 
 
     # def loop(self):
 
@@ -168,8 +169,8 @@ class AudioClient():
                 ae = self.audio_event[0]
                 ae_head = self.audio_event[1]
 
-                print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
-                print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x, ae_head.y, ae_head.z))
+                #print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
+                #print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x, ae_head.y, ae_head.z))
 
                 # if the event level is above the threshold than "push" towards it
 
