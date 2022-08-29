@@ -77,7 +77,7 @@ class AudioClient():
         self.tail_ys = np.zeros(self.x_len)
         self.tail_line, = self.tail_plot.plot(self.tail_xs, self.tail_ys, linewidth=0.5, color="c")
 
-        self.ani = animation.FuncAnimation(self.fig, self.update_line, fargs=(self.left_ear_ys,self.right_ear_ys, self.head_ys, self.tail_ys,), init_func=self.animation_init, interval=10, blit=False)
+        #self.ani = animation.FuncAnimation(self.fig, self.update_line, fargs=(self.left_ear_ys,self.right_ear_ys, self.head_ys, self.tail_ys,), init_func=self.animation_init, interval=10, blit=False)
         self.fig.subplots_adjust(hspace=0, wspace=0)
 
         self.input_mics = np.zeros((self.x_len, self.no_of_mics))
@@ -98,7 +98,7 @@ class AudioClient():
         self.msg_push.link = miro.constants.LINK_HEAD
         #self.msg_push.flags = miro.constants.PUSH_FLAG_VELOCITY
         #self.msg_push.flags = miro.constants.PUSH_FLAG_NO_TRANSLATION
-        self.msg_push.flags = miro.constants.PUSH_FLAG_NO_TRANSLATION + miro.constants.PUSH_FLAG_VELOCITY
+        self.msg_push.flags = (miro.constants.PUSH_FLAG_NO_TRANSLATION + miro.constants.PUSH_FLAG_VELOCITY)
 
         # status flags
         self.audio_event = None
@@ -118,76 +118,80 @@ class AudioClient():
         data = np.transpose(data.reshape((self.no_of_mics, 500)))
         data = np.flipud(data)
         self.input_mics = np.vstack((data, self.input_mics[:self.x_len-500,:]))
-        print(self.audio_event) 
+        # print(self.audio_event) 
 
-    # def loop(self):
-
-    #     while not rospy.core.is_shutdown():
-    #         #plt.show()
-    #         if self.audio_event is None:
-    #             continue
-    #         if self.audio_event[0] is None:
-    #             continue
-    #         ae = self.audio_event[0]
-    #         ae_head = self.audio_event[1]
-
-    #         print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
-    #         print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x, ae_head.y, ae_head.z))
-
-    #         # if the event level is above the threshold than "push" towards it
-
-    #         if ae.level >= 0.02:
-    #             # send push
-    #             self.msg_push.pushpos = geometry_msgs.msg.Vector3(
-    #                 miro.constants.LOC_NOSE_TIP_X, 
-    #                 miro.constants.LOC_NOSE_TIP_Y, 
-    #                 miro.constants.LOC_NOSE_TIP_Z
-    #             )
-    #             self.msg_push.pushvec = geometry_msgs.msg.Vector3(
-    #                 miro.constants.LOC_NOSE_TIP_X + ae_head.x,
-    #                 miro.constants.LOC_NOSE_TIP_Y + ae_head.y,
-    #                 miro.constants.LOC_NOSE_TIP_Z
-    #             )
-    #             self.pub_push.publish(self.msg_push)
-
-
-    def loop_idea2(self):
+    def loop(self):
+        #rospy.sleep(2)
         while not rospy.core.is_shutdown():
-            # print(self.orienting)
-            if self.orienting:
+            #plt.show()
+            #ospy.sleep(2)
+            if self.audio_event is None:
+                continue
+            if self.audio_event[0] is None:
+                continue
+            ae = self.audio_event[0]
+            ae_head = self.audio_event[1]
+
+            print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
+            print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x, ae_head.y, ae_head.z))
+
+            # if the event level is above the threshold than "push" towards it
+
+            if ae.level >= 0.04:
+                # send push
+                self.msg_push.pushpos = geometry_msgs.msg.Vector3(
+                    miro.constants.LOC_NOSE_TIP_X, 
+                    miro.constants.LOC_NOSE_TIP_Y, 
+                    miro.constants.LOC_NOSE_TIP_Z
+                )
+                self.msg_push.pushvec = geometry_msgs.msg.Vector3(
+                    miro.constants.LOC_NOSE_TIP_X + ae_head.x,
+                    miro.constants.LOC_NOSE_TIP_Y + ae_head.y,
+                    miro.constants.LOC_NOSE_TIP_Z
+                )
                 self.pub_push.publish(self.msg_push)
-                if rospy.Time.now() > self.start_time + rospy.Duration(0.5):
-                    self.orienting = False
-                # print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
-                # print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x, ae_head.y, ae_head.z))
+                self.audio_event=[]
+                print("MiRo is moving......")
+                rospy.sleep(1)
 
-            else:
-                if self.audio_event is None:
-                    continue
-                if self.audio_event[0] is None:
-                    continue
-                ae = self.audio_event[0]
-                ae_head = self.audio_event[1]
 
-                #print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
-                #print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x, ae_head.y, ae_head.z))
+    # def loop_idea2(self):
+    #     while not rospy.core.is_shutdown():
+    #         # print(self.orienting)
+    #         if self.orienting:
+    #             self.pub_push.publish(self.msg_push)
+    #             if rospy.Time.now() > self.start_time + rospy.Duration(0.5):
+    #                 self.orienting = False
+    #             # print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
+    #             # print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x, ae_head.y, ae_head.z))
 
-                # if the event level is above the threshold than "push" towards it
+    #         else:
+    #             if self.audio_event is None:
+    #                 continue
+    #             if self.audio_event[0] is None:
+    #                 continue
+    #             ae = self.audio_event[0]
+    #             ae_head = self.audio_event[1]
 
-                if ae.level >= self.thresh:
-                    # send push
-                    self.msg_push.pushpos = geometry_msgs.msg.Vector3(
-                        miro.constants.LOC_NOSE_TIP_X, 
-                        miro.constants.LOC_NOSE_TIP_Y, 
-                        miro.constants.LOC_NOSE_TIP_Z
-                    )
-                    self.msg_push.pushvec = geometry_msgs.msg.Vector3(
-                        miro.constants.LOC_NOSE_TIP_X + ae_head.x,
-                        miro.constants.LOC_NOSE_TIP_Y + ae_head.y,
-                        miro.constants.LOC_NOSE_TIP_Z
-                    )
-                    self.orienting = True
-                    self.start_time = rospy.Time.now()
+    #             print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
+    #             #print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x, ae_head.y, ae_head.z))
+
+    #             # if the event level is above the threshold than "push" towards it
+
+    #             if ae.level >= self.thresh:
+    #                 # send push
+    #                 self.msg_push.pushpos = geometry_msgs.msg.Vector3(
+    #                     miro.constants.LOC_NOSE_TIP_X, 
+    #                     miro.constants.LOC_NOSE_TIP_Y, 
+    #                     miro.constants.LOC_NOSE_TIP_Z
+    #                 )
+    #                 self.msg_push.pushvec = geometry_msgs.msg.Vector3(
+    #                     miro.constants.LOC_NOSE_TIP_X + ae_head.x,
+    #                     miro.constants.LOC_NOSE_TIP_Y + ae_head.y,
+    #                     miro.constants.LOC_NOSE_TIP_Z
+    #                 )
+    #                 self.orienting = True
+    #                 self.start_time = rospy.Time.now()
 
     def update_line(self, i, left_ear_ys, right_ear_ys, head_ys, tail_ys):
         #Flip buffer so that incoming data moves in from the right
@@ -233,4 +237,4 @@ if __name__ == "__main__":
     AudioEng = DetectAudioEngine()
     main = AudioClient()
     #plt.show()
-    main.loop_idea2()
+    main.loop()
