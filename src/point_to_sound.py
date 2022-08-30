@@ -14,6 +14,7 @@ from std_msgs.msg import Int16MultiArray
 from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+from geometry_msgs.msg import Twist, TwistStamped
 
 class AudioClient():
    
@@ -77,7 +78,7 @@ class AudioClient():
         self.tail_ys = np.zeros(self.x_len)
         self.tail_line, = self.tail_plot.plot(self.tail_xs, self.tail_ys, linewidth=0.5, color="c")
 
-        #self.ani = animation.FuncAnimation(self.fig, self.update_line, fargs=(self.left_ear_ys,self.right_ear_ys, self.head_ys, self.tail_ys,), init_func=self.animation_init, interval=10, blit=False)
+        # self.ani = animation.FuncAnimation(self.fig, self.update_line, fargs=(self.left_ear_ys,self.right_ear_ys, self.head_ys, self.tail_ys,), init_func=self.animation_init, interval=10, blit=False)
         self.fig.subplots_adjust(hspace=0, wspace=0)
 
         self.input_mics = np.zeros((self.x_len, self.no_of_mics))
@@ -92,6 +93,7 @@ class AudioClient():
 
         # publishers
         self.pub_push = rospy.Publisher(topic_base_name + "/core/mpg/push", miro.msg.push, queue_size=0)
+        self.pub_wheels = rospy.Publisher(topic_base_name + "/control/cmd_vel", TwistStamped, queue_size=0)
 
         # prepare push message
         self.msg_push = miro.msg.push()
@@ -105,6 +107,10 @@ class AudioClient():
         self.orienting = False
         self.action_time = 1 #secs
         self.thresh = 0.05
+
+        # time
+        self.frame=[]
+        self.msg_wheels = TwistStamped()
         
 
     def callback_mics(self, data):
@@ -119,40 +125,122 @@ class AudioClient():
         data = np.flipud(data)
         self.input_mics = np.vstack((data, self.input_mics[:self.x_len-500,:]))
         # print(self.audio_event) 
+    
+    def voice_accident(self):
+        m = 0.00
+        if self.audio_event != []:
+            if self.audio_event != None:
+                if self.audio_event[0] != None:
+                    ae = self.audio_event[0]
+                    #print(self.audio_event[2])
+                    print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
+                    self.frame = self.audio_event[1]
+                    # if ae.level >= 0.03:
+                    m = (self.audio_event[2][0]+self.audio_event[2][1])/2
+                    #if self.audio_event[2][0] >= 0.10:
+                    if m >= 0.10:
+                        self.status_code = 2
+                    else:
+                        self.status_code = 0
+                else:
+                    self.status_code = 0 
+            else:
+                self.status_code = 0 
+        else:
+            self.status_code = 0 
 
-    def loop(self):
-        #rospy.sleep(2)
+    def lock_onto_sound(self,ae_head):
+    # send push
+        self.msg_push.pushpos = geometry_msgs.msg.Vector3(
+            0.000,
+            #miro.constants.LOC_NOSE_TIP_X, 
+            miro.constants.LOC_NOSE_TIP_Y, 
+            #miro.constants.LOC_NOSE_TIP_Z
+            0.200
+        )
+        self.msg_push.pushvec = geometry_msgs.msg.Vector3(
+            # miro.constants.LOC_NOSE_TIP_X + ae_head.x,
+            0.000+ae_head.x,
+            miro.constants.LOC_NOSE_TIP_Y + ae_head.y,
+            #ae_head.y,
+            0.200
+            #miro.constants.LOC_NOSE_TIP_Z
+        )
+        self.pub_push.publish(self.msg_push)
+        self.audio_event=[]
+        print("MiRo is moving......")
+        self.status_code = 0 
+
+    # def turn_to_sound(self,ae_head):
+        
+    #     v = 0.0
+    #     self.msg_wheels.twist.linear.x = 0.0
+    #     self.msg_wheels.twist.angular.z = v * 6.2832
+    #     self.pub_wheels.publish(self.msg_wheels)
+
+    # def loop(self):
+    #     #rospy.sleep(2)
+    #     while not rospy.core.is_shutdown():
+    #         #plt.show()
+    #         #ospy.sleep(2)
+    #         if self.audio_event is None:
+    #             continue
+    #         if self.audio_event[0] is None:
+    #             continue
+    #         ae = self.audio_event[0]
+    #         ae_head = self.audio_event[1]
+
+    #         print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
+    #         print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x, ae_head.y, ae_head.z))
+
+    #         # if the event level is above the threshold than "push" towards it
+
+    #         if ae.level >= 0.03:
+    #             self.count += 1
+    #             if self.count >= 20:
+    #                 self.count = 0
+    #                 # send push
+    #                 self.msg_push.pushpos = geometry_msgs.msg.Vector3(
+    #                     miro.constants.LOC_NOSE_TIP_X, 
+    #                     miro.constants.LOC_NOSE_TIP_Y, 
+    #                     miro.constants.LOC_NOSE_TIP_Z
+    #                 )
+    #                 self.msg_push.pushvec = geometry_msgs.msg.Vector3(
+    #                     miro.constants.LOC_NOSE_TIP_X + ae_head.x,
+    #                     miro.constants.LOC_NOSE_TIP_Y + ae_head.y,
+    #                     miro.constants.LOC_NOSE_TIP_Z
+    #                 )
+    #                 self.pub_push.publish(self.msg_push)
+    #                 #self.audio_event=[]
+    #                 print("MiRo is moving......")
+    #                 rospy.sleep(0.1)
+
+    def loop3(self):
+        # Main control loop iteration counter
+        #self.counter = 0
+        msg_wheels = TwistStamped()
+
+        # This switch loops through MiRo behaviours:
+        # Listen to sound, turn to the sound source
+        self.status_code = 0
         while not rospy.core.is_shutdown():
-            #plt.show()
-            #ospy.sleep(2)
-            if self.audio_event is None:
-                continue
-            if self.audio_event[0] is None:
-                continue
-            ae = self.audio_event[0]
-            ae_head = self.audio_event[1]
 
-            print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
-            print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x, ae_head.y, ae_head.z))
+            # Step 1. sound event detection
+            if self.status_code == 1:
+                # Every once in a while, look for ball
+               self.voice_accident()
 
-            # if the event level is above the threshold than "push" towards it
+            # Step 2. Orient towards it
+            elif self.status_code == 2:
+                    #             print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
+                #print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(self.frame.x, self.frame.y, self.frame.z))
+                self.lock_onto_sound(self.frame)
 
-            if ae.level >= 0.04:
-                # send push
-                self.msg_push.pushpos = geometry_msgs.msg.Vector3(
-                    miro.constants.LOC_NOSE_TIP_X, 
-                    miro.constants.LOC_NOSE_TIP_Y, 
-                    miro.constants.LOC_NOSE_TIP_Z
-                )
-                self.msg_push.pushvec = geometry_msgs.msg.Vector3(
-                    miro.constants.LOC_NOSE_TIP_X + ae_head.x,
-                    miro.constants.LOC_NOSE_TIP_Y + ae_head.y,
-                    miro.constants.LOC_NOSE_TIP_Z
-                )
-                self.pub_push.publish(self.msg_push)
-                self.audio_event=[]
-                print("MiRo is moving......")
-                rospy.sleep(1)
+            # Fall back
+            else:
+                self.status_code = 1
+
+            #rospy.sleep(0.01)
 
 
     # def loop_idea2(self):
@@ -237,4 +325,4 @@ if __name__ == "__main__":
     AudioEng = DetectAudioEngine()
     main = AudioClient()
     #plt.show()
-    main.loop()
+    main.loop3()

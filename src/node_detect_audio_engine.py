@@ -47,8 +47,8 @@ INTER_EAR_DISTANCE = 0.104 # metres
 MIC_SAMPLE_RATE = 20000 # audio sample rate
 INTER_EAR_LAG = INTER_EAR_DISTANCE / SPEED_OF_SOUND * MIC_SAMPLE_RATE
 
-ASSUMED_SOUND_SOURCE_HEIGHT = 1.0 # metres
-ASSUMED_SOUND_SOURCE_RANGE = 1.5 # metres
+ASSUMED_SOUND_SOURCE_HEIGHT = 0.5 # metres
+ASSUMED_SOUND_SOURCE_RANGE = 1.0 # metres
 
 
 class DetectAudioEvent():
@@ -341,7 +341,7 @@ class DetectAudioEngine():
 		for i in range(4):
 			x = np.mean(np.abs(data[i]))
 			sound_level.append(x)
-
+		#print(sound_level)
 
 		# beyond sound level, only interested in left & right
 		ear_data = data[0:2][:]
@@ -403,10 +403,11 @@ class DetectAudioEngine():
 		#thresh = RAW_MAGNITUDE_THRESH
 		#print(hn)
 		if hn!=0:
-			thresh = self.non_silence_thresh(self.buf_head_abs,hn)+d_mean
+			#thresh = self.non_silence_thresh(self.buf_head_abs,hn)+d_mean
+			thresh = RAW_MAGNITUDE_THRESH
 		else:
 			thresh = RAW_MAGNITUDE_THRESH
-		print(thresh)
+		#print(thresh)
 
 		if hn >= 0:
 			h = d[hn]
