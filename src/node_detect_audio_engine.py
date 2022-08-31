@@ -58,6 +58,7 @@ class DetectAudioEvent():
 		self.azim = data[0]
 		self.elev = data[1]
 		self.level = data[2]
+		self.ang = data[3]
 
 class DetectAudioEventHead():
 	# Cartesian in the HEAD frame
@@ -92,6 +93,8 @@ class DetectAudioEngine():
 		self.azim = 0.0
 		self.elev = 0.0
 		self.level = 0.0
+		self.ang = 0.0
+	
 
     # dynamic threshold for SILENCE and NON-SILENCE
 	def non_silence_thresh(self,x,hn):
@@ -312,7 +315,7 @@ class DetectAudioEngine():
 		r = np.sqrt(x*x + y*y)
 		self.azim = np.arctan2(y, x)
 		self.elev = np.arctan2(z, r)
-
+		self.ang = self.azim * 180/np.pi
 		# NB2: Actually, let's not discard it just yet.
 		self.loc_src_HEAD = loc_src_HEAD
 
@@ -465,7 +468,7 @@ class DetectAudioEngine():
 			self.process_configuration()
 
 			# publish
-			event = DetectAudioEvent([self.azim, self.elev, self.level])
+			event = DetectAudioEvent([self.azim, self.elev, self.level,self.ang])
 			event_head = DetectAudioEventHead(self.loc_src_HEAD)
 
 		# return

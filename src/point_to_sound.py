@@ -15,6 +15,7 @@ from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from geometry_msgs.msg import Twist, TwistStamped
+import time
 
 class AudioClient():
    
@@ -98,9 +99,9 @@ class AudioClient():
         # prepare push message
         self.msg_push = miro.msg.push()
         self.msg_push.link = miro.constants.LINK_HEAD
-        #self.msg_push.flags = miro.constants.PUSH_FLAG_VELOCITY
+        self.msg_push.flags = miro.constants.PUSH_FLAG_VELOCITY
         #self.msg_push.flags = miro.constants.PUSH_FLAG_NO_TRANSLATION
-        self.msg_push.flags = (miro.constants.PUSH_FLAG_NO_TRANSLATION + miro.constants.PUSH_FLAG_VELOCITY)
+        #self.msg_push.flags = (miro.constants.PUSH_FLAG_NO_TRANSLATION + miro.constants.PUSH_FLAG_VELOCITY)
 
         # status flags
         self.audio_event = None
@@ -109,7 +110,7 @@ class AudioClient():
         self.thresh = 0.05
 
         # time
-        self.frame=[]
+        self.frame_p = None
         self.msg_wheels = TwistStamped()
         
 
@@ -133,12 +134,11 @@ class AudioClient():
                 if self.audio_event[0] != None:
                     ae = self.audio_event[0]
                     #print(self.audio_event[2])
-                    print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
+                    #print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
                     self.frame = self.audio_event[1]
                     # if ae.level >= 0.03:
                     m = (self.audio_event[2][0]+self.audio_event[2][1])/2
-                    #if self.audio_event[2][0] >= 0.10:
-                    if m >= 0.10:
+                    if m >= 0.03:
                         self.status_code = 2
                     else:
                         self.status_code = 0
@@ -151,32 +151,67 @@ class AudioClient():
 
     def lock_onto_sound(self,ae_head):
     # send push
-        self.msg_push.pushpos = geometry_msgs.msg.Vector3(
-            0.000,
-            #miro.constants.LOC_NOSE_TIP_X, 
-            miro.constants.LOC_NOSE_TIP_Y, 
-            #miro.constants.LOC_NOSE_TIP_Z
-            0.200
-        )
-        self.msg_push.pushvec = geometry_msgs.msg.Vector3(
-            # miro.constants.LOC_NOSE_TIP_X + ae_head.x,
-            0.000+ae_head.x,
-            miro.constants.LOC_NOSE_TIP_Y + ae_head.y,
-            #ae_head.y,
-            0.200
-            #miro.constants.LOC_NOSE_TIP_Z
-        )
-        self.pub_push.publish(self.msg_push)
-        self.audio_event=[]
-        print("MiRo is moving......")
-        self.status_code = 0 
-
-    # def turn_to_sound(self,ae_head):
         
-    #     v = 0.0
-    #     self.msg_wheels.twist.linear.x = 0.0
-    #     self.msg_wheels.twist.angular.z = v * 6.2832
-    #     self.pub_wheels.publish(self.msg_wheels)
+        # print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x,ae_head.y, ae_head.z))
+        
+        # self.msg_push.pushpos = geometry_msgs.msg.Vector3(
+        #     miro.constants.LOC_NOSE_TIP_X, 
+        #     miro.constants.LOC_NOSE_TIP_Y, 
+        #     miro.constants.LOC_NOSE_TIP_Z
+        # )
+
+        # self.msg_push.pushvec = geometry_msgs.msg.Vector3(
+        #     #miro.constants.LOC_NOSE_TIP_X + ae_head.x,
+        #     ae_head.x,
+        #     #miro.constants.LOC_NOSE_TIP_Y + ae_head.y,
+        #     ae_head.y,
+        #     0.0
+        #     #miro.constants.LOC_NOSE_TIP_Z
+        # )
+        # self.pub_push.publish(self.msg_push)
+        # #self.audio_event=[]
+        # print("MiRo is moving......")
+        # self.status_code = 0 
+
+        if ae_head.x == self.frame_p:
+            self.status_code = 0 
+        else:
+            # print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x,ae_head.y, ae_head.z))
+            # self.frame_p = ae_head.x
+            # self.msg_push.pushpos = geometry_msgs.msg.Vector3(
+            #     miro.constants.LOC_NOSE_TIP_X, 
+            #     miro.constants.LOC_NOSE_TIP_Y, 
+            #     miro.constants.LOC_NOSE_TIP_Z
+            # )
+
+            # self.msg_push.pushvec = geometry_msgs.msg.Vector3(
+            #     miro.constants.LOC_NOSE_TIP_X + ae_head.x,
+            #     #ae_head.x,
+            #     miro.constants.LOC_NOSE_TIP_Y + ae_head.y,
+            #     #ae_head.y,
+            #     #0.0
+            #     miro.constants.LOC_NOSE_TIP_Z
+            # )
+            # self.pub_push.publish(self.msg_push)
+            self.turn_to_sound()
+            #self.audio_event=[]
+            print("MiRo is moving......")
+            self.status_code = 0 
+
+
+    def turn_to_sound(self): 
+        print("angular in degrees:{:.2f}".format(self.audio_event[0].ang))
+        v = self.audio_event[0].azim
+        T1=0
+        while(T1<=1):
+            self.msg_wheels.twist.linear.x = 0.0
+            #self.msg_wheels.twist.angular.z = v*(-180)/np.pi/2
+            self.msg_wheels.twist.angular.z = 0.0
+            self.pub_wheels.publish(self.msg_wheels)
+            time.sleep(0.02)
+            T1+=0.02
+
+
 
     # def loop(self):
     #     #rospy.sleep(2)
@@ -232,15 +267,12 @@ class AudioClient():
 
             # Step 2. Orient towards it
             elif self.status_code == 2:
-                    #             print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
-                #print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(self.frame.x, self.frame.y, self.frame.z))
                 self.lock_onto_sound(self.frame)
 
             # Fall back
             else:
                 self.status_code = 1
-
-            #rospy.sleep(0.01)
+            #rospy.sleep(0.02)
 
 
     # def loop_idea2(self):
