@@ -112,6 +112,9 @@ class AudioClient():
         # time
         self.frame_p = None
         self.msg_wheels = TwistStamped()
+        self.controller = miro.lib.PoseController()
+        self.cmd_vel = miro.lib.DeltaPose()
+
         
 
     def callback_mics(self, data):
@@ -150,16 +153,13 @@ class AudioClient():
             self.status_code = 0 
 
     def lock_onto_sound(self,ae_head):
-    # send push
         
-        # print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x,ae_head.y, ae_head.z))
-        
+        # #print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x,ae_head.y, ae_head.z))
         # self.msg_push.pushpos = geometry_msgs.msg.Vector3(
         #     miro.constants.LOC_NOSE_TIP_X, 
         #     miro.constants.LOC_NOSE_TIP_Y, 
         #     miro.constants.LOC_NOSE_TIP_Z
-        # )
-
+        #     )
         # self.msg_push.pushvec = geometry_msgs.msg.Vector3(
         #     #miro.constants.LOC_NOSE_TIP_X + ae_head.x,
         #     ae_head.x,
@@ -167,17 +167,19 @@ class AudioClient():
         #     ae_head.y,
         #     0.0
         #     #miro.constants.LOC_NOSE_TIP_Z
-        # )
+        #     )
         # self.pub_push.publish(self.msg_push)
         # #self.audio_event=[]
         # print("MiRo is moving......")
         # self.status_code = 0 
 
+ 
+
         if ae_head.x == self.frame_p:
             self.status_code = 0 
         else:
             # print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x,ae_head.y, ae_head.z))
-            # self.frame_p = ae_head.x
+            self.frame_p = ae_head.x
             # self.msg_push.pushpos = geometry_msgs.msg.Vector3(
             #     miro.constants.LOC_NOSE_TIP_X, 
             #     miro.constants.LOC_NOSE_TIP_Y, 
@@ -185,15 +187,17 @@ class AudioClient():
             # )
 
             # self.msg_push.pushvec = geometry_msgs.msg.Vector3(
-            #     miro.constants.LOC_NOSE_TIP_X + ae_head.x,
-            #     #ae_head.x,
-            #     miro.constants.LOC_NOSE_TIP_Y + ae_head.y,
-            #     #ae_head.y,
+            #     #miro.constants.LOC_NOSE_TIP_X + ae_head.x,
+            #     ae_head.x,
+            #     #miro.constants.LOC_NOSE_TIP_Y + ae_head.y,
+            #     ae_head.y,
             #     #0.0
             #     miro.constants.LOC_NOSE_TIP_Z
             # )
             # self.pub_push.publish(self.msg_push)
+
             self.turn_to_sound()
+
             #self.audio_event=[]
             print("MiRo is moving......")
             self.status_code = 0 
@@ -202,11 +206,28 @@ class AudioClient():
     def turn_to_sound(self): 
         print("angular in degrees:{:.2f}".format(self.audio_event[0].ang))
         v = self.audio_event[0].azim
+        Tf = 0.5
         T1=0
-        while(T1<=1):
+        while(T1 <= Tf):
+
+            # # with gain
+            # gain = 0.0
+            # self.cmd_vel.zero()
+            # gain = np.minimum(T1/0.5, 1.0)
+            # self.cmd_vel.dr = 0
+            # self.cmd_vel.dtheta = v
+            # self.cmd_vel = self.controller.command_velocity(self.cmd_vel, 0.02, gain)
+            # self.msg_wheels.twist.linear.x = self.cmd_vel.dr
+            # self.msg_wheels.twist.angular.z = self.cmd_vel.dtheta
+            
+            # without gain
             self.msg_wheels.twist.linear.x = 0.0
-            #self.msg_wheels.twist.angular.z = v*(-180)/np.pi/2
+            #self.msg_wheels.twist.angular.z = v*0.15/0.13*2
+            #self.msg_wheels.twist.angular.z = v*2
+
+            # test output
             self.msg_wheels.twist.angular.z = 0.0
+
             self.pub_wheels.publish(self.msg_wheels)
             time.sleep(0.02)
             T1+=0.02
@@ -268,6 +289,10 @@ class AudioClient():
             # Step 2. Orient towards it
             elif self.status_code == 2:
                 self.lock_onto_sound(self.frame)
+
+                #clear the data collected when miro is turning
+                self.audio_event=[]
+
 
             # Fall back
             else:

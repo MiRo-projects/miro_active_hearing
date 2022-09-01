@@ -146,14 +146,18 @@ class DetectAudioEngine():
 		D0r = D0.conjugate()
 		G = D0r * D1 # frequency domain based cross correlation
 		# W0 = 1. # frequency unweighted
-		# W1 = 1./numpy.abs(G) 
-		# Xgcorr = irfft(W1 * G) # generalized frequency domain based cross correlation with "PHAT"
-		absG = np.abs(G)
-		m = max(absG)
-		W = 1. / (1e-10 * m + absG)
-		Xcorr = irfft(W * G)
+		W1 = 1./np.abs(G) 
+		Xgcorr = irfft(W1 * G) # generalized frequency domain based cross correlation with "PHAT"
+		
+		#absG = np.abs(G)
+		#m = max(absG)
+		#W = 1. / (1e-10 * m + absG)
+		#Xcorr = irfft(W * G)
 
-		return Xcorr
+		#Xcorr = irfft(W * G)
+
+		return Xgcorr
+		#return Xcorr
 
 
 	def high_point(self, hn):
@@ -192,8 +196,8 @@ class DetectAudioEngine():
 		wav = self.buf[:, hn-L:hn+L+1]
 
 		# xcorr
-		# xco = np.correlate(wav[0, :], wav[1, :], mode='same')
-		xco = self.gcc(wav[0, :], wav[1, :])
+		xco = np.correlate(wav[0, :], wav[1, :], mode='same')
+		#xco = self.gcc(wav[0, :], wav[1, :])
 
 		# find best peak in xco (only in plausible range)
 		i_peak = np.argmax(xco[c-L_max:c+L_max+1])
@@ -315,7 +319,10 @@ class DetectAudioEngine():
 		r = np.sqrt(x*x + y*y)
 		self.azim = np.arctan2(y, x)
 		self.elev = np.arctan2(z, r)
+		# azim in degree 
 		self.ang = self.azim * 180/np.pi
+
+
 		# NB2: Actually, let's not discard it just yet.
 		self.loc_src_HEAD = loc_src_HEAD
 
