@@ -94,6 +94,9 @@ class DetectAudioEngine():
 		self.elev = 0.0
 		self.level = 0.0
 		self.ang = 0.0
+
+		#roll buffer
+		self.tmp = []
 	
 
     # dynamic threshold for SILENCE and NON-SILENCE
@@ -168,7 +171,8 @@ class DetectAudioEngine():
 		# time lags of interest. the ears are separated by about 6 samples
 		# at 20kHz (104mm / 343m * 20k) but longer samples are needed to
 		# do a good job at spotting inter-ear correlations.
-		L_max = 6
+		
+		L_max = 8 # 2 more sample for acceptable error in the distance of mics
 		L = L_max * 8
 		c = L # centre of xcorr equal to L in python 0-indexing (L+1 in matlab)
 

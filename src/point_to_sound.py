@@ -223,10 +223,10 @@ class AudioClient():
             # without gain
             self.msg_wheels.twist.linear.x = 0.0
             #self.msg_wheels.twist.angular.z = v*0.15/0.13*2
-            #self.msg_wheels.twist.angular.z = v*2
+            self.msg_wheels.twist.angular.z = v*2
 
             # test output
-            self.msg_wheels.twist.angular.z = 0.0
+            #self.msg_wheels.twist.angular.z = 0.0
 
             self.pub_wheels.publish(self.msg_wheels)
             time.sleep(0.02)
