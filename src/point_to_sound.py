@@ -99,9 +99,7 @@ class AudioClient():
         # prepare push message
         self.msg_push = miro.msg.push()
         self.msg_push.link = miro.constants.LINK_HEAD
-        self.msg_push.flags = miro.constants.PUSH_FLAG_VELOCITY
-        #self.msg_push.flags = miro.constants.PUSH_FLAG_NO_TRANSLATION
-        #self.msg_push.flags = (miro.constants.PUSH_FLAG_NO_TRANSLATION + miro.constants.PUSH_FLAG_VELOCITY)
+        self.msg_push.flags = (miro.constants.PUSH_FLAG_NO_TRANSLATION + miro.constants.PUSH_FLAG_VELOCITY)
 
         # status flags
         self.audio_event = None
@@ -115,20 +113,38 @@ class AudioClient():
         self.controller = miro.lib.PoseController()
         self.cmd_vel = miro.lib.DeltaPose()
 
+        # save previous head data
+        self.tmp = []
+
         
 
     def callback_mics(self, data):
         self.audio_event = AudioEng.process_data(data.data)
+
+        # save data for dynamic threshold
+        data_t = np.asarray(data.data, 'float32') * (1.0 / 32768.0)
+        data_t = data_t.reshape((4, 500))    
+        self.head_data = data_t[2][:]
+        if self.tmp is None:
+            self.tmp = np.hstack((self.tmp, np.abs(self.head_data)))
+        elif (len(self.tmp)<10500):
+            i = 0
+            self.tmp = np.hstack((self.tmp, np.abs(self.head_data)))
+        else:
+            self.tmp = np.hstack((self.tmp[-10000:], np.abs(self.head_data)))
+            #print(self.tmp)
+            #AudioEng.non_silence_thresh(self.tmp)
+
+        #print(self.tmp)
+        #AudioEng.non_silence_thresh(self.tmp)
         
         # data for display
-
         data = np.asarray(data.data)
-        # print(data.shape) # output:(2000,)
         # 500 samples from each mics
         data = np.transpose(data.reshape((self.no_of_mics, 500)))
         data = np.flipud(data)
         self.input_mics = np.vstack((data, self.input_mics[:self.x_len-500,:]))
-        # print(self.audio_event) 
+
     
     def voice_accident(self):
         m = 0.00
@@ -154,47 +170,29 @@ class AudioClient():
 
     def lock_onto_sound(self,ae_head):
         
-        # #print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x,ae_head.y, ae_head.z))
-        # self.msg_push.pushpos = geometry_msgs.msg.Vector3(
-        #     miro.constants.LOC_NOSE_TIP_X, 
-        #     miro.constants.LOC_NOSE_TIP_Y, 
-        #     miro.constants.LOC_NOSE_TIP_Z
-        #     )
-        # self.msg_push.pushvec = geometry_msgs.msg.Vector3(
-        #     #miro.constants.LOC_NOSE_TIP_X + ae_head.x,
-        #     ae_head.x,
-        #     #miro.constants.LOC_NOSE_TIP_Y + ae_head.y,
-        #     ae_head.y,
-        #     0.0
-        #     #miro.constants.LOC_NOSE_TIP_Z
-        #     )
-        # self.pub_push.publish(self.msg_push)
-        # #self.audio_event=[]
-        # print("MiRo is moving......")
-        # self.status_code = 0 
-
- 
-
+        # detect if it is the frame within the same event
         if ae_head.x == self.frame_p:
             self.status_code = 0 
-        else:
-            # print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x,ae_head.y, ae_head.z))
-            self.frame_p = ae_head.x
-            # self.msg_push.pushpos = geometry_msgs.msg.Vector3(
-            #     miro.constants.LOC_NOSE_TIP_X, 
-            #     miro.constants.LOC_NOSE_TIP_Y, 
-            #     miro.constants.LOC_NOSE_TIP_Z
-            # )
 
-            # self.msg_push.pushvec = geometry_msgs.msg.Vector3(
-            #     #miro.constants.LOC_NOSE_TIP_X + ae_head.x,
-            #     ae_head.x,
-            #     #miro.constants.LOC_NOSE_TIP_Y + ae_head.y,
-            #     ae_head.y,
-            #     #0.0
-            #     miro.constants.LOC_NOSE_TIP_Z
-            # )
-            # self.pub_push.publish(self.msg_push)
+            # if (self.audio_event[0].azim == 1.54):
+            #     self.frame_p = ae_head.x
+            #     self.turn_to_sound()
+            #     print("MiRo is moving......")
+            #     self.audio_event=[]
+            #     self.status_code = 0 
+
+            # elif(self.audio_event[0].ang == -88.33):
+            #     self.frame_p = ae_head.x
+            #     self.turn_to_sound()
+            #     print("MiRo is moving......")
+            #     self.turn_to_sound()
+            #     self.status_code = 0 
+
+            # else:
+            #     self.status_code = 0
+
+        else:
+            self.frame_p = ae_head.x
 
             self.turn_to_sound()
 
@@ -222,15 +220,23 @@ class AudioClient():
             
             # without gain
             self.msg_wheels.twist.linear.x = 0.0
-            #self.msg_wheels.twist.angular.z = v*0.15/0.13*2
-            self.msg_wheels.twist.angular.z = v*2
+            #self.msg_wheels.twist.angular.z = v*2
 
             # test output
-            #self.msg_wheels.twist.angular.z = 0.0
+            self.msg_wheels.twist.angular.z = 0.0
 
             self.pub_wheels.publish(self.msg_wheels)
             time.sleep(0.02)
             T1+=0.02
+        
+        # while(T1 <= v/3):
+            
+        #     self.msg_wheels.twist.linear.x = 0.0
+        #     self.msg_wheels.twist.angular.z = 2.0
+
+        #     self.pub_wheels.publish(self.msg_wheels)
+        #     time.sleep(0.02)
+        #     T1+=0.02
 
 
 

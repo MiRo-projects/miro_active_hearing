@@ -47,8 +47,8 @@ INTER_EAR_DISTANCE = 0.104 # metres
 MIC_SAMPLE_RATE = 20000 # audio sample rate
 INTER_EAR_LAG = INTER_EAR_DISTANCE / SPEED_OF_SOUND * MIC_SAMPLE_RATE
 
-ASSUMED_SOUND_SOURCE_HEIGHT = 0.5 # metres
-ASSUMED_SOUND_SOURCE_RANGE = 1.0 # metres
+ASSUMED_SOUND_SOURCE_HEIGHT = 0.15 # metres
+ASSUMED_SOUND_SOURCE_RANGE = 0.5 # metres
 
 
 class DetectAudioEvent():
@@ -78,6 +78,8 @@ class DetectAudioEngine():
 		self.buf = None
 		self.buf_head = None
 		self.buf_abs = None
+		self.buf_tail = None
+		self.buf_tail_abs = None
 		self.buf_head_abs = None
 		self.buf_abs_fast = np.zeros((2, SAMP_PER_BLOCK), 'float32')
 		self.buf_abs_slow = np.zeros((2, SAMP_PER_BLOCK), 'float32')
@@ -96,21 +98,26 @@ class DetectAudioEngine():
 		self.ang = 0.0
 
 		#roll buffer
-		self.tmp = []
+		self.thresh = 0.00
 	
 
-    # dynamic threshold for SILENCE and NON-SILENCE
-	def non_silence_thresh(self,x,hn):
+	# dynamic threshold for SILENCE and NON-SILENCE
+	def non_silence_thresh(self,x):
+		#print(x)
 		# collect data before a high point
-		noise = x[hn-50:hn]
-		n_abs = np.abs(noise)
-		# get the mean of noise
-		# print(n_abs) # 有时候会有第二个维度，有第二个维度的时候输出不是\non
-		t = np.mean(n_abs)
-		# apply a new threshold for non-silence state
+		if self.hn is not None:
+			#print(self.hn)
+			noise = x[self.hn:self.hn+10000]
+			#print(noise)
+			if x is not None:
+				self.thresh = np.mean(noise) # apply a new threshold for non-silence state
 
-		return t
+		else:
+			self.thresh = RAW_MAGNITUDE_THRESH
+		#print(self.thresh)
+        
 	
+
 	def filter(self, x, n):
 
 		# create filter
@@ -172,7 +179,7 @@ class DetectAudioEngine():
 		# at 20kHz (104mm / 343m * 20k) but longer samples are needed to
 		# do a good job at spotting inter-ear correlations.
 		
-		L_max = 8 # 2 more sample for acceptable error in the distance of mics
+		L_max = 7 # 2 more sample for acceptable error in the distance of mics
 		L = L_max * 8
 		c = L # centre of xcorr equal to L in python 0-indexing (L+1 in matlab)
 
@@ -198,6 +205,7 @@ class DetectAudioEngine():
 
 		# extract section of original signal
 		wav = self.buf[:, hn-L:hn+L+1]
+		wav_tail = self.buf_tail[hn-L:hn+L+1]
 
 		# xcorr
 		xco = np.correlate(wav[0, :], wav[1, :], mode='same')
@@ -207,17 +215,6 @@ class DetectAudioEngine():
 		i_peak = np.argmax(xco[c-L_max:c+L_max+1])
 		i_peak += L - L_max
 
-		# store
-		"""
-		np.savetxt('/tmp/wav', wav)
-		x = self.buf_abs_slow[:, hn-L:hn+L+1]
-		np.savetxt('/tmp/slow', x)
-		x = self.buf_abs_fast[:, hn-L:hn+L+1]
-		np.savetxt('/tmp/fast', x)
-		x = self.buf_diff[hn-L:hn+L+1]
-		np.savetxt('/tmp/dif', x)
-		np.savetxt('/tmp/xco', xco)
-		"""
 
 		# discard if not actually a peak
 		if xco[i_peak-1] > xco[i_peak] or xco[i_peak+1] > xco[i_peak]:
@@ -264,6 +261,25 @@ class DetectAudioEngine():
 		# compute azimuth and RMS level
 		azim = -np.arcsin(lag);
 		level = np.sqrt(level / (2 * L + 1))
+
+        # # the time lag of 45 degree is -61, 90 degree is -57, 135 degree is -54
+		# if (azim>0):
+		# 	xco_ear_tail = np.correlate(wav[0, :], wav_tail[:], mode='same')
+		# 	t_peak = np.argmax(xco_ear_tail[c-L_max:c+L_max+1])
+		# 	t_lag = float(t_peak - c)
+		# 	#print(t_lag)
+		# 	if(t_lag>=(-54)):
+		# 		azim = np.pi-azim
+			
+		# else:
+		# 	xco_ear_tail = np.correlate(wav[1, :], wav_tail[:], mode='same')
+		# 	t_peak = np.argmax(xco_ear_tail[c-L_max:c+L_max+1])
+		# 	t_lag = float(t_peak - c)
+		# 	#rint(t_lag)
+		# 	if(t_lag>=(-54)):
+		# 		azim = -np.pi-azim
+
+
 
 		# report
 		#print "azimuth and level", azim, level
@@ -346,9 +362,7 @@ class DetectAudioEngine():
 		#data_all =  data.reshape((4, 20000))
 		#print(data.shape)
 		data = data.reshape((4, SAMP_PER_BLOCK))
-		#head_data = data_all[2:3][:]
-		head_data = data[2][:]
-		#print(head_data)
+
 
 		# compute level
 		sound_level = []
@@ -359,7 +373,8 @@ class DetectAudioEngine():
 
 		# beyond sound level, only interested in left & right
 		ear_data = data[0:2][:]
-		#print(ear_data.shape)
+		head_data = data[2][:]
+		tail_data = data[3][:]
 	
 
 		# fill buffer 0,1
@@ -370,12 +385,19 @@ class DetectAudioEngine():
 		if self.buf_head is None:
 			self.buf_head = head_data
 			self.buf_head_abs = np.abs(head_data)
-		#print(self.buf_head_abs)
+		if self.buf_tail is None:
+			self.buf_tail = tail_data
+			self.buf_tail_abs = np.abs(tail_data)
+
 
 		# roll buffers, same data is added
 		self.buf = np.hstack((self.buf[:, -SAMP_PER_BLOCK:], ear_data))
 		self.buf_abs = np.hstack((self.buf_abs[:, -SAMP_PER_BLOCK:], np.abs(ear_data)))
 		# print(self.buf.shape) # output is (2,1000)
+		self.buf_head = np.hstack((self.buf_head[-SAMP_PER_BLOCK:], head_data))
+		self.buf_head_abs = np.hstack((self.buf_head_abs[-SAMP_PER_BLOCK:], np.abs(head_data)))
+		self.buf_tail = np.hstack((self.buf_tail[-SAMP_PER_BLOCK:], tail_data))
+		self.buf_tail_abs = np.hstack((self.buf_tail_abs[-SAMP_PER_BLOCK:], np.abs(tail_data)))
 
 		# since it is a rolling buffer, we can filter it in a rolling
 		# manner. however, I don't know if the convolve() function
@@ -414,13 +436,16 @@ class DetectAudioEngine():
 			else:
 				# high point now forgotten
 				hn = 0
-		#thresh = RAW_MAGNITUDE_THRESH
+		thresh = RAW_MAGNITUDE_THRESH
 		#print(hn)
-		if hn!=0:
-			#thresh = self.non_silence_thresh(self.buf_head_abs,hn)+d_mean
-			thresh = RAW_MAGNITUDE_THRESH
-		else:
-			thresh = RAW_MAGNITUDE_THRESH
+		# if hn!=0:
+		# 	thresh = self.thresh
+		# 	#thresh = RAW_MAGNITUDE_THRESH
+		# else:
+		# 	thresh = RAW_MAGNITUDE_THRESH
+		# #print(thresh)
+		
+		#thresh = self.thresh
 		#print(thresh)
 
 		if hn >= 0:
@@ -435,11 +460,12 @@ class DetectAudioEngine():
 			if hn == -1:
 
 				# if well below threshold
-				if d[n] < (0.5 * thresh):
+				if d[n] < (0.5 * RAW_MAGNITUDE_THRESH):
 
 					# store new high point (below threshold)
 					h = d[n]
 					hn = n
+					self.hn = hn
 
 			# if not waiting for reset
 			else:
@@ -450,12 +476,13 @@ class DetectAudioEngine():
 					# update stored high point
 					h = d[n]
 					hn = n
+					self.hn = hn
 
 				# look for end of high point
 				if h > thresh and d[n] < (0.5 * h):
 
 					# process high point
-					self.high_point(hn - nf / 2)
+					self.high_point(self.hn - nf / 2)
 
 					# clear
 					h = thresh
