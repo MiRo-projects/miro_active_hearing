@@ -17,6 +17,13 @@ import matplotlib.animation as animation
 from geometry_msgs.msg import Twist, TwistStamped
 import time
 
+
+try:  # For convenience, import this util separately
+    from miro2.lib import wheel_speed2cmd_vel  # Python 3
+except ImportError:
+    from miro2.utils import wheel_speed2cmd_vel  # Python 2
+
+
 class AudioClient():
    
     def __init__(self):       
@@ -30,7 +37,7 @@ class AudioClient():
         self.fig = plt.figure()
         self.fig.suptitle("Microphones") # Give figure title
 
-		#HEAD
+        #HEAD
         self.head_plot = self.fig.add_subplot(4,1,3)
         self.head_plot.set_ylim([-33000, 33000])
         self.head_plot.set_xlim([0, self.x_len])
@@ -116,7 +123,26 @@ class AudioClient():
         # save previous head data
         self.tmp = []
 
-        
+    def drive(self, speed_l=0.1, speed_r=0.1):  # (m/sec, m/sec)
+        """
+        Wrapper to simplify driving MiRo by converting wheel speeds to cmd_vel
+        """
+        # Prepare an empty velocity command message
+        msg_cmd_vel = TwistStamped()
+
+        # Desired wheel speed (m/sec)
+        wheel_speed = [speed_l, speed_r]
+
+        # Convert wheel speed to command velocity (m/sec, Rad/sec)
+        (dr, dtheta) = wheel_speed2cmd_vel(wheel_speed)
+
+        # Update the message with the desired speed
+        msg_cmd_vel.twist.linear.x = dr
+        msg_cmd_vel.twist.angular.z = dtheta
+
+        # Publish message to control/cmd_vel topic
+        self.vel_pub.publish(msg_cmd_vel)
+    
 
     def callback_mics(self, data):
         self.audio_event = AudioEng.process_data(data.data)
