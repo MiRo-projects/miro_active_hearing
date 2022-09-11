@@ -115,29 +115,29 @@ class AudioClient():
 
         # save previous head data
         self.tmp = []
+        self.thresh = 0
+        self.thresh_min = 0.03
 
         
 
     def callback_mics(self, data):
+        # data for angular calculation
         self.audio_event = AudioEng.process_data(data.data)
 
-        # save data for dynamic threshold
+        # data for dynamic thresholding
         data_t = np.asarray(data.data, 'float32') * (1.0 / 32768.0)
         data_t = data_t.reshape((4, 500))    
         self.head_data = data_t[2][:]
         if self.tmp is None:
             self.tmp = np.hstack((self.tmp, np.abs(self.head_data)))
         elif (len(self.tmp)<10500):
-            i = 0
             self.tmp = np.hstack((self.tmp, np.abs(self.head_data)))
         else:
+            # when the buffer is full
             self.tmp = np.hstack((self.tmp[-10000:], np.abs(self.head_data)))
-            #print(self.tmp)
-            #AudioEng.non_silence_thresh(self.tmp)
+            # dynamic threshold is calculated and updated when new signal come
+            self.thresh = self.thresh_min + AudioEng.non_silence_thresh(self.tmp)
 
-        #print(self.tmp)
-        #AudioEng.non_silence_thresh(self.tmp)
-        
         # data for display
         data = np.asarray(data.data)
         # 500 samples from each mics
@@ -155,9 +155,8 @@ class AudioClient():
                     #print(self.audio_event[2])
                     #print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
                     self.frame = self.audio_event[1]
-                    # if ae.level >= 0.03:
                     m = (self.audio_event[2][0]+self.audio_event[2][1])/2
-                    if m >= 0.03:
+                    if m >= self.thresh:
                         self.status_code = 2
                     else:
                         self.status_code = 0
@@ -173,23 +172,6 @@ class AudioClient():
         # detect if it is the frame within the same event
         if ae_head.x == self.frame_p:
             self.status_code = 0 
-
-            # if (self.audio_event[0].azim == 1.54):
-            #     self.frame_p = ae_head.x
-            #     self.turn_to_sound()
-            #     print("MiRo is moving......")
-            #     self.audio_event=[]
-            #     self.status_code = 0 
-
-            # elif(self.audio_event[0].ang == -88.33):
-            #     self.frame_p = ae_head.x
-            #     self.turn_to_sound()
-            #     print("MiRo is moving......")
-            #     self.turn_to_sound()
-            #     self.status_code = 0 
-
-            # else:
-            #     self.status_code = 0
 
         else:
             self.frame_p = ae_head.x
@@ -228,15 +210,7 @@ class AudioClient():
             self.pub_wheels.publish(self.msg_wheels)
             time.sleep(0.02)
             T1+=0.02
-        
-        # while(T1 <= v/3):
-            
-        #     self.msg_wheels.twist.linear.x = 0.0
-        #     self.msg_wheels.twist.angular.z = 2.0
 
-        #     self.pub_wheels.publish(self.msg_wheels)
-        #     time.sleep(0.02)
-        #     T1+=0.02
 
 
 
