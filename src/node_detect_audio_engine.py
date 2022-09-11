@@ -46,6 +46,8 @@ SPEED_OF_SOUND = 343.0 # m/s
 INTER_EAR_DISTANCE = 0.104 # metres
 MIC_SAMPLE_RATE = 20000 # audio sample rate
 INTER_EAR_LAG = INTER_EAR_DISTANCE / SPEED_OF_SOUND * MIC_SAMPLE_RATE
+EAR_TAIL_DISTANCE = 0.121 # metres
+EAR_TAIL_LAG = EAR_TAIL_DISTANCE / SPEED_OF_SOUND * MIC_SAMPLE_RATE
 
 ASSUMED_SOUND_SOURCE_HEIGHT = 0.15 # metres
 ASSUMED_SOUND_SOURCE_RANGE = 0.5 # metres
@@ -101,20 +103,18 @@ class DetectAudioEngine():
 		self.thresh = 0.00
 	
 
-	# dynamic threshold for SILENCE and NON-SILENCE
+	# dynamic threshold : threshold increase tin noisy environment
 	def non_silence_thresh(self,x):
-		#print(x)
-		# collect data before a high point
+		# data range:samples for 0.5s around high point
 		if self.hn is not None:
-			#print(self.hn)
-			noise = x[self.hn:self.hn+10000]
-			#print(noise)
+			noise = np.abs(x[-10000:])
 			if x is not None:
 				self.thresh = np.mean(noise) # apply a new threshold for non-silence state
 
 		else:
 			self.thresh = RAW_MAGNITUDE_THRESH
 		#print(self.thresh)
+		return self.thresh
         
 	
 
@@ -254,28 +254,34 @@ class DetectAudioEngine():
 		# normalize and constrain
 		lag *= (1.0 / INTER_EAR_LAG)
 		lag = np.clip(lag, -1.0, 1.0)
+		#print(lag)
 
 		# report
 		#print "normalized lag", lag
 
 		# compute azimuth and RMS level
-		azim = -np.arcsin(lag);
+		azim = -np.arcsin(lag)
 		level = np.sqrt(level / (2 * L + 1))
 
         # # the time lag of 45 degree is -61, 90 degree is -57, 135 degree is -54
 		# if (azim>0):
 		# 	xco_ear_tail = np.correlate(wav[0, :], wav_tail[:], mode='same')
+		# 	#t_peak = xco_ear_tail[i_peak]
 		# 	t_peak = np.argmax(xco_ear_tail[c-L_max:c+L_max+1])
 		# 	t_lag = float(t_peak - c)
-		# 	#print(t_lag)
-		# 	if(t_lag>=(-54)):
+		# 	t_lag *= (1.0 / EAR_TAIL_LAG)
+		# 	t_lag = np.clip(lag, -1.0, 1.0)
+		# 	print(t_lag)
+		# 	if(t_lag>=(-0.95)):
 		# 		azim = np.pi-azim
 			
 		# else:
 		# 	xco_ear_tail = np.correlate(wav[1, :], wav_tail[:], mode='same')
 		# 	t_peak = np.argmax(xco_ear_tail[c-L_max:c+L_max+1])
 		# 	t_lag = float(t_peak - c)
-		# 	#rint(t_lag)
+		# 	t_lag *= (1.0 / EAR_TAIL_LAG)
+		# 	t_lag = np.clip(lag, -1.0, 1.0)
+		# 	#print(t_lag)
 		# 	if(t_lag>=(-54)):
 		# 		azim = -np.pi-azim
 
