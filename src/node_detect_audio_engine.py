@@ -142,30 +142,21 @@ class DetectAudioEngine():
 
 	# generalized cross correlation
 	def gcc(self, d0, d1):
-        # substract the means
-        # (in order to get a normalized cross-correlation at the end)
-		d0 -= d0.mean()
-		d1 -= d1.mean()
-
-		# Hann window to mitigate non-periodicity effects
-		window = np.hanning(len(d0))
-
-        # compute the cross-correlation
-		D0 = rfft(d0 * window)
-		D1 = rfft(d1 * window)
-		D0r = D0.conjugate()
-		G = D0r * D1 # frequency domain based cross correlation
-		# W0 = 1. # frequency unweighted
-		W1 = 1./np.abs(G) 
-		Xgcorr = irfft(W1 * G) # generalized frequency domain based cross correlation with "PHAT"
-		
-		#absG = np.abs(G)
-		#m = max(absG)
-		#W = 1. / (1e-10 * m + absG)
-		#Xcorr = irfft(W * G)
-
-		#Xcorr = irfft(W * G)
-
+		pad1 = np.zeros(len(d0))
+		pad2 = np.zeros(len(d1))
+		#pad two signal
+		s1 = np.hstack([d0[-113:],pad1])
+		s2 = np.hstack([pad2,d1[-113:]])
+		f_s1 = fft(s1)
+		f_s2 = fft(s2)
+		f_s2c = np.conj(f_s2)
+		f_s = f_s1 * f_s2c
+		#PHAT
+		denom = abs(f_s)
+		f_s = f_s/denom
+		l = len(d0)/2
+		r = l+len(d0)
+		Xgcorr = np.abs(ifft(f_s,226))[57:57+113]
 		return Xgcorr
 		#return Xcorr
 
@@ -254,7 +245,6 @@ class DetectAudioEngine():
 		# normalize and constrain
 		lag *= (1.0 / INTER_EAR_LAG)
 		lag = np.clip(lag, -1.0, 1.0)
-		#print(lag)
 
 		# report
 		#print "normalized lag", lag
@@ -263,32 +253,29 @@ class DetectAudioEngine():
 		azim = -np.arcsin(lag)
 		level = np.sqrt(level / (2 * L + 1))
 
-        # # the time lag of 45 degree is -61, 90 degree is -57, 135 degree is -54
-		# if (azim>0):
-		# 	xco_ear_tail = np.correlate(wav[0, :], wav_tail[:], mode='same')
-		# 	#t_peak = xco_ear_tail[i_peak]
-		# 	t_peak = np.argmax(xco_ear_tail[c-L_max:c+L_max+1])
-		# 	t_lag = float(t_peak - c)
-		# 	t_lag *= (1.0 / EAR_TAIL_LAG)
-		# 	t_lag = np.clip(lag, -1.0, 1.0)
-		# 	print(t_lag)
-		# 	if(t_lag>=(-0.95)):
-		# 		azim = np.pi-azim
+        # # this part help the robot distinguish between front and back, which needs to be improved
+		#
+		# # the ratio of average_level_of_two_ear_mics and average_difference_between_each_ear_mic_and_tail
+		# # is used to as the basis of front and back, when the sound source is closer to ear than tail it
+		# # will be considered as located in the front of the robot, while the ratio is higher
+		# if (azim>0): # if we know the sound source is in the left side
+		# 	wav_diff = np.abs(wav[0][:]) - np.abs(wav_tail[:]) # level difference between left ear mic and tail mic
+		# 	m = np.mean(np.abs(wav[:]))# mean of two ear mics
+		# 	wav_d = np.mean(np.abs(wav_diff)) # mean of level difference
+		# 	r = wav_d/m # ratio of level difference and average level of two ear mics
+		# 	# this ra(ration) is only valid when the sound source range samller than 0.5m
+		# 	# in other situation,e.p. different range,different sound source, this value must be changed
+		# 	if(r<=1.00):
+		# 		azim = np.pi-azim # reverse the angle
 			
 		# else:
-		# 	xco_ear_tail = np.correlate(wav[1, :], wav_tail[:], mode='same')
-		# 	t_peak = np.argmax(xco_ear_tail[c-L_max:c+L_max+1])
-		# 	t_lag = float(t_peak - c)
-		# 	t_lag *= (1.0 / EAR_TAIL_LAG)
-		# 	t_lag = np.clip(lag, -1.0, 1.0)
-		# 	#print(t_lag)
-		# 	if(t_lag>=(-54)):
-		# 		azim = -np.pi-azim
+		# 	wav_diff = np.abs(wav[1][:]) - np.abs(wav_tail[:])
+		# 	m = np.mean(np.abs(wav[:]))
+		# 	wav_d = np.mean(np.abs(wav_diff))
+		# 	r = wav_d/m
+		# 	if(r<=0.80):
+		# 		azim = (-np.pi)-azim
 
-
-
-		# report
-		#print "azimuth and level", azim, level
 
 		# store
 		if level > self.level:
@@ -355,39 +342,29 @@ class DetectAudioEngine():
 
 	def process_data(self, data):
 
-		# default
-		# event = None
-		# sound_level = []
-
 		# clear any pending event (so we can send only one per block)
 		self.level = 0.0
 
 		# reshape
 		data = np.asarray(data, 'float32') * (1.0 / 32768.0)
-		#head_data = data[2:3][:]
-		#data_all =  data.reshape((4, 20000))
-		#print(data.shape)
 		data = data.reshape((4, SAMP_PER_BLOCK))
-
 
 		# compute level
 		sound_level = []
 		for i in range(4):
 			x = np.mean(np.abs(data[i]))
 			sound_level.append(x)
-		#print(sound_level)
+		# print(sound_level)
 
 		# beyond sound level, only interested in left & right
 		ear_data = data[0:2][:]
 		head_data = data[2][:]
 		tail_data = data[3][:]
-	
 
-		# fill buffer 0,1
+		# fill buffer 0,1,2,3
 		if self.buf is None:
 			self.buf = ear_data
 			self.buf_abs = np.abs(ear_data)
-			# return (event, sound_level)
 		if self.buf_head is None:
 			self.buf_head = head_data
 			self.buf_head_abs = np.abs(head_data)
@@ -395,11 +372,9 @@ class DetectAudioEngine():
 			self.buf_tail = tail_data
 			self.buf_tail_abs = np.abs(tail_data)
 
-
 		# roll buffers, same data is added
 		self.buf = np.hstack((self.buf[:, -SAMP_PER_BLOCK:], ear_data))
 		self.buf_abs = np.hstack((self.buf_abs[:, -SAMP_PER_BLOCK:], np.abs(ear_data)))
-		# print(self.buf.shape) # output is (2,1000)
 		self.buf_head = np.hstack((self.buf_head[-SAMP_PER_BLOCK:], head_data))
 		self.buf_head_abs = np.hstack((self.buf_head_abs[-SAMP_PER_BLOCK:], np.abs(head_data)))
 		self.buf_tail = np.hstack((self.buf_tail[-SAMP_PER_BLOCK:], tail_data))
@@ -443,16 +418,6 @@ class DetectAudioEngine():
 				# high point now forgotten
 				hn = 0
 		thresh = RAW_MAGNITUDE_THRESH
-		#print(hn)
-		# if hn!=0:
-		# 	thresh = self.thresh
-		# 	#thresh = RAW_MAGNITUDE_THRESH
-		# else:
-		# 	thresh = RAW_MAGNITUDE_THRESH
-		# #print(thresh)
-		
-		#thresh = self.thresh
-		#print(thresh)
 
 		if hn >= 0:
 			h = d[hn]
