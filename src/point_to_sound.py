@@ -86,7 +86,7 @@ class AudioClient():
         self.tail_ys = np.zeros(self.x_len)
         self.tail_line, = self.tail_plot.plot(self.tail_xs, self.tail_ys, linewidth=0.5, color="c")
 
-        # self.ani = animation.FuncAnimation(self.fig, self.update_line, fargs=(self.left_ear_ys,self.right_ear_ys, self.head_ys, self.tail_ys,), init_func=self.animation_init, interval=10, blit=False)
+        self.ani = animation.FuncAnimation(self.fig, self.update_line, fargs=(self.left_ear_ys,self.right_ear_ys, self.head_ys, self.tail_ys,), init_func=self.animation_init, interval=10, blit=False)
         self.fig.subplots_adjust(hspace=0, wspace=0)
 
         self.input_mics = np.zeros((self.x_len, self.no_of_mics))
@@ -122,6 +122,7 @@ class AudioClient():
 
         # save previous head data
         self.tmp = []
+        # dynamic threshold
         self.thresh = 0
         self.thresh_min = 0.03
 
@@ -130,7 +131,7 @@ class AudioClient():
         Wrapper to simplify driving MiRo by converting wheel speeds to cmd_vel
         """
         # Prepare an empty velocity command message
-        msg_cmd_vel = TwistStamped()
+        #msg_cmd_vel = TwistStamped()
 
         # Desired wheel speed (m/sec)
         wheel_speed = [speed_l, speed_r]
@@ -139,11 +140,11 @@ class AudioClient():
         (dr, dtheta) = wheel_speed2cmd_vel(wheel_speed)
 
         # Update the message with the desired speed
-        msg_cmd_vel.twist.linear.x = dr
-        msg_cmd_vel.twist.angular.z = dtheta
+        self.msg_wheels.twist.linear.x = dr
+        self.msg_wheels.twist.angular.z = dtheta
 
         # Publish message to control/cmd_vel topic
-        self.vel_pub.publish(msg_cmd_vel)
+        self.pub_wheels.publish(self.msg_wheels)
     
 
     def callback_mics(self, data):
@@ -196,90 +197,43 @@ class AudioClient():
     def lock_onto_sound(self,ae_head):
         
         # detect if it is the frame within the same event
+        # error may occur when the sound source is nearby the 90 degree of each side of MiRo
+        # this is because the sample rate is not high enough for calculating in a higher accuracy
+        # thus MiRo may considerred the angel inside (85,95) or (-95,-85) as the same angel
         if ae_head.x == self.frame_p:
             self.status_code = 0 
 
         else:
+            # the frame is different: not from the same event
             self.frame_p = ae_head.x
-
             self.turn_to_sound()
-
-            #self.audio_event=[]
             print("MiRo is moving......")
             self.status_code = 0 
 
 
     def turn_to_sound(self): 
+        if self.audio_event[0] is None:
+            return
         print("angular in degrees:{:.2f}".format(self.audio_event[0].ang))
         v = self.audio_event[0].azim
+        #MiRo finish its rotation in 0.5s
         Tf = 0.5
         T1=0
         while(T1 <= Tf):
 
-            # # with gain
-            # gain = 0.0
-            # self.cmd_vel.zero()
-            # gain = np.minimum(T1/0.5, 1.0)
-            # self.cmd_vel.dr = 0
-            # self.cmd_vel.dtheta = v
-            # self.cmd_vel = self.controller.command_velocity(self.cmd_vel, 0.02, gain)
-            # self.msg_wheels.twist.linear.x = self.cmd_vel.dr
-            # self.msg_wheels.twist.angular.z = self.cmd_vel.dtheta
-            
-            # without gain
+            #self.drive(v*2,v*2)
             self.msg_wheels.twist.linear.x = 0.0
-            #self.msg_wheels.twist.angular.z = v*2
+            self.msg_wheels.twist.angular.z = v*2
 
             # test output
-            self.msg_wheels.twist.angular.z = 0.0
+            #self.msg_wheels.twist.angular.z = 0.0
 
             self.pub_wheels.publish(self.msg_wheels)
             time.sleep(0.02)
             T1+=0.02
 
 
-
-
-    # def loop(self):
-    #     #rospy.sleep(2)
-    #     while not rospy.core.is_shutdown():
-    #         #plt.show()
-    #         #ospy.sleep(2)
-    #         if self.audio_event is None:
-    #             continue
-    #         if self.audio_event[0] is None:
-    #             continue
-    #         ae = self.audio_event[0]
-    #         ae_head = self.audio_event[1]
-
-    #         print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
-    #         print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x, ae_head.y, ae_head.z))
-
-    #         # if the event level is above the threshold than "push" towards it
-
-    #         if ae.level >= 0.03:
-    #             self.count += 1
-    #             if self.count >= 20:
-    #                 self.count = 0
-    #                 # send push
-    #                 self.msg_push.pushpos = geometry_msgs.msg.Vector3(
-    #                     miro.constants.LOC_NOSE_TIP_X, 
-    #                     miro.constants.LOC_NOSE_TIP_Y, 
-    #                     miro.constants.LOC_NOSE_TIP_Z
-    #                 )
-    #                 self.msg_push.pushvec = geometry_msgs.msg.Vector3(
-    #                     miro.constants.LOC_NOSE_TIP_X + ae_head.x,
-    #                     miro.constants.LOC_NOSE_TIP_Y + ae_head.y,
-    #                     miro.constants.LOC_NOSE_TIP_Z
-    #                 )
-    #                 self.pub_push.publish(self.msg_push)
-    #                 #self.audio_event=[]
-    #                 print("MiRo is moving......")
-    #                 rospy.sleep(0.1)
-
-    def loop3(self):
-        # Main control loop iteration counter
-        #self.counter = 0
+    def loop(self):
         msg_wheels = TwistStamped()
 
         # This switch loops through MiRo behaviours:
@@ -295,7 +249,6 @@ class AudioClient():
             # Step 2. Orient towards it
             elif self.status_code == 2:
                 self.lock_onto_sound(self.frame)
-
                 #clear the data collected when miro is turning
                 self.audio_event=[]
 
@@ -303,46 +256,7 @@ class AudioClient():
             # Fall back
             else:
                 self.status_code = 1
-            #rospy.sleep(0.02)
 
-
-    # def loop_idea2(self):
-    #     while not rospy.core.is_shutdown():
-    #         # print(self.orienting)
-    #         if self.orienting:
-    #             self.pub_push.publish(self.msg_push)
-    #             if rospy.Time.now() > self.start_time + rospy.Duration(0.5):
-    #                 self.orienting = False
-    #             # print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
-    #             # print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x, ae_head.y, ae_head.z))
-
-    #         else:
-    #             if self.audio_event is None:
-    #                 continue
-    #             if self.audio_event[0] is None:
-    #                 continue
-    #             ae = self.audio_event[0]
-    #             ae_head = self.audio_event[1]
-
-    #             print("Azimuth: {:.2f}; Elevation: {:.2f}; Level : {:.2f}".format(ae.azim, ae.elev, ae.level))
-    #             #print("X: {:.2f}; Y: {:.2f}; Z : {:.2f}".format(ae_head.x, ae_head.y, ae_head.z))
-
-    #             # if the event level is above the threshold than "push" towards it
-
-    #             if ae.level >= self.thresh:
-    #                 # send push
-    #                 self.msg_push.pushpos = geometry_msgs.msg.Vector3(
-    #                     miro.constants.LOC_NOSE_TIP_X, 
-    #                     miro.constants.LOC_NOSE_TIP_Y, 
-    #                     miro.constants.LOC_NOSE_TIP_Z
-    #                 )
-    #                 self.msg_push.pushvec = geometry_msgs.msg.Vector3(
-    #                     miro.constants.LOC_NOSE_TIP_X + ae_head.x,
-    #                     miro.constants.LOC_NOSE_TIP_Y + ae_head.y,
-    #                     miro.constants.LOC_NOSE_TIP_Z
-    #                 )
-    #                 self.orienting = True
-    #                 self.start_time = rospy.Time.now()
 
     def update_line(self, i, left_ear_ys, right_ear_ys, head_ys, tail_ys):
         #Flip buffer so that incoming data moves in from the right
@@ -387,5 +301,5 @@ if __name__ == "__main__":
     rospy.init_node("point_to_sound", anonymous=True)
     AudioEng = DetectAudioEngine()
     main = AudioClient()
-    #plt.show()
-    main.loop3()
+    plt.show() # to stop signal display next run: comment this line and line 89(self.ani...)
+    main.loop()
