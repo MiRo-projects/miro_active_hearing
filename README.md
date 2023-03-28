@@ -1,5 +1,5 @@
 # Auditory active sensing with the MiRo robot
-### PGT dissertation by Yijing Shen (project code)
+### PGT dissertation by Yijing Chen (project code)
 
 ## About
 
